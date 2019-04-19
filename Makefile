@@ -26,7 +26,7 @@ build:
 
 .phony: run
 run:
-	$(make) WATCH_NAMESPACE=default ./bin/cmd/manager
+	/usr/local/bin/operator-sdk up local --namespace=default
 
 .PHONY: test
 test: build
