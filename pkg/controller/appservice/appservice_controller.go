@@ -5,6 +5,7 @@ import (
 	"reflect"
 
 	cachev1alpha1 "github.com/hackerthon2019/configmap-reload-operator/pkg/apis/app/v1alpha1"
+	// kubeCtl "github.com/hackerthon2019/configmap-reload-operator/pkg/kubectl"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -13,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -106,6 +108,11 @@ func (r *ReconcileApp) Reconcile(request reconcile.Request) (reconcile.Result, e
 		return reconcile.Result{}, err
 	}
 
+	for k, v := range app.Spec.Selector {
+		reqLogger.Info("MyKEY: " + k)
+		reqLogger.Info("MyVALUE: " + v)
+	}
+
 	// Check if the deployment already exists, if not create a new one
 	found := &appsv1.Deployment{}
 	err = r.client.Get(context.TODO(), types.NamespacedName{Name: app.Name, Namespace: app.Namespace}, found)
@@ -163,6 +170,54 @@ func (r *ReconcileApp) Reconcile(request reconcile.Request) (reconcile.Result, e
 	return reconcile.Result{}, nil
 }
 
+// configmapForApp returns a app Configmap object
+func (r *ReconcileApp) configmapForApp(m *cachev1alpha1.AppService) *corev1.ConfigMap {
+	// ls := labelsForApp(m.Name)
+	data := map[string]string{"data": "mydata"}
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      m.Name,
+			Namespace: "default",
+		},
+		Data: data,
+	}
+	// Set App instance as the owner and controller
+	controllerutil.SetControllerReference(m, cm, r.scheme)
+	return cm
+}
+
+// serviceForApp returns a app Configmap object
+func (r *ReconcileApp) serviceForApp(m *cachev1alpha1.AppService) *corev1.Service {
+	ls := labelsForApp(m.Name)
+	targetPort := intstr.IntOrString{
+		Type:   intstr.Int,
+		IntVal: 80,
+		StrVal: "80",
+	}
+
+	ports := []corev1.ServicePort{
+		{
+			Name:       "http",
+			Port:       int32(80),
+			TargetPort: targetPort,
+			NodePort:   int32(30080),
+		},
+	}
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "nginx-expose",
+		},
+		Spec: corev1.ServiceSpec{
+			Type:     "NodePort",
+			Selector: ls,
+			Ports:    ports,
+		},
+	}
+	// Set App instance as the owner and controller
+	controllerutil.SetControllerReference(m, svc, r.scheme)
+	return svc
+}
+
 // deploymentForApp returns a app Deployment object
 func (r *ReconcileApp) deploymentForApp(m *cachev1alpha1.AppService) *appsv1.Deployment {
 	ls := labelsForApp(m.Name)
@@ -188,11 +243,10 @@ func (r *ReconcileApp) deploymentForApp(m *cachev1alpha1.AppService) *appsv1.Dep
 				},
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{{
-						Image:   "memcached:1.4.36-alpine",
-						Name:    "app",
-						Command: []string{"memcached", "-m=64", "-o", "modern", "-v"},
+						Image: "nginx:stable-alpine",
+						Name:  "app",
 						Ports: []corev1.ContainerPort{{
-							ContainerPort: 11211,
+							ContainerPort: 80,
 							Name:          "app",
 						}},
 					}},

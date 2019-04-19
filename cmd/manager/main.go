@@ -30,6 +30,9 @@ var (
 	metricsHost       = "0.0.0.0"
 	metricsPort int32 = 8383
 )
+
+// var KubeCtl *kubeCtl.KubeCtl
+
 var log = logf.Log.WithName("cmd")
 
 func printVersion() {
@@ -74,6 +77,8 @@ func main() {
 		os.Exit(1)
 	}
 
+	// clientset := kubernetes.NewForConfigOrDie(cfg)
+	// KubeCtl = kubeCtl.New(clientset)
 	ctx := context.TODO()
 
 	// Become the leader before proceeding

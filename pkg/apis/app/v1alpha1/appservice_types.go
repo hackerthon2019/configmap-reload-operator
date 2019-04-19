@@ -14,7 +14,8 @@ type AppServiceSpec struct {
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	// Add custom validation using kubebuilder tags: https://book.kubebuilder.io/beyond_basics/generating_crd.html
 	// Size is the size of the app deployment
-	Size int32 `json:"size"`
+	Size     int32             `json:"size"`
+	Selector map[string]string `json:"selector"`
 }
 
 // AppServiceStatus defines the observed state of AppService
