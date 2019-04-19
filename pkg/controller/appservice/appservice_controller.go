@@ -6,6 +6,7 @@ import (
 
 	cachev1alpha1 "github.com/hackerthon2019/configmap-reload-operator/pkg/apis/app/v1alpha1"
 	// kubeCtl "github.com/hackerthon2019/configmap-reload-operator/pkg/kubectl"
+	"github.com/hackerthon2019/configmap-reload-operator/pkg/utils"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -59,7 +60,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	// TODO(user): Modify this to be the types you create that are owned by the primary resource
 	// Watch for changes to secondary resource Pods and requeue the owner App
-	err = c.Watch(&source.Kind{Type: &appsv1.Deployment{}}, &handler.EnqueueRequestForOwner{
+	err = c.Watch(&source.Kind{Type: &corev1.ConfigMap{}}, &handler.EnqueueRequestForOwner{
 		IsController: true,
 		OwnerType:    &cachev1alpha1.AppService{},
 	})
@@ -108,59 +109,60 @@ func (r *ReconcileApp) Reconcile(request reconcile.Request) (reconcile.Result, e
 		return reconcile.Result{}, err
 	}
 
+	for _, f := range app.Spec.Reload {
+		reqLogger.Info("My reload file:" + f)
+	}
+
+	// Define a new deployment
+	dep := r.deploymentForApp(app)
+	reqLogger.Info("Creating a new Deployment", "Deployment.Namespace", dep.Namespace, "Deployment.Name", dep.Name)
+	err = r.client.Create(context.TODO(), dep)
+	if err != nil {
+		reqLogger.Error(err, "Failed to create new Deployment", "Deployment.Namespace", dep.Namespace, "Deployment.Name", dep.Name)
+	}
+
+	// Define a new configmap
+	cm := r.configmapForApp(app)
+	reqLogger.Info("Creating a new ConfigMap", "ConfigMap.Namespace", cm.Namespace, "ConfigMap.Name", cm.Name)
+	err = r.client.Create(context.TODO(), cm)
+	if err != nil {
+		reqLogger.Error(err, "Failed to create new ConfigMap", "ConfigMap.Namespace", cm.Namespace, "ConfigMap.Name", cm.Name)
+	}
+
+	// Define a new service
+	svc := r.serviceForApp(app)
+	reqLogger.Info("Creating a new Service", "Service.Namespace", svc.Namespace, "Service.Name", svc.Name)
+	err = r.client.Create(context.TODO(), svc)
+	if err != nil {
+		reqLogger.Error(err, "Failed to create new Service", "Service.Namespace", svc.Namespace, "Service.Name", svc.Name)
+	}
+
+	cmFound := &corev1.ConfigMap{}
+	err = r.client.Get(context.TODO(), types.NamespacedName{Name: "nginx-index", Namespace: request.Namespace}, cmFound)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// Request object not found, could have been deleted after reconcile request.
+			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
+			// Return and don't requeue
+			reqLogger.Info("ConfigMap resource not found. Ignoring since object must be deleted")
+			return reconcile.Result{}, nil
+		}
+		// Error reading the object - requeue the request.
+		reqLogger.Error(err, "Failed to get ConfigMap")
+		return reconcile.Result{}, err
+	}
+	for _, f := range app.Spec.Reload {
+		reqLogger.Info("Comparing the " + f + " file...")
+		if utils.IsSameMD5(cm.Data[f], cmFound.Data[f]) {
+			reqLogger.Info(f + " has same name as previous.")
+		} else {
+			reqLogger.Info(f + " should now do comfigmap reload!")
+		}
+	}
+
 	for k, v := range app.Spec.Selector {
 		reqLogger.Info("MyKEY: " + k)
 		reqLogger.Info("MyVALUE: " + v)
-	}
-
-	// Check if the deployment already exists, if not create a new one
-	found := &appsv1.Deployment{}
-	err = r.client.Get(context.TODO(), types.NamespacedName{Name: app.Name, Namespace: app.Namespace}, found)
-	if err != nil && errors.IsNotFound(err) {
-		// Define a new deployment
-		dep := r.deploymentForApp(app)
-		reqLogger.Info("Creating a new Deployment", "Deployment.Namespace", dep.Namespace, "Deployment.Name", dep.Name)
-		err = r.client.Create(context.TODO(), dep)
-		if err != nil {
-			reqLogger.Error(err, "Failed to create new Deployment", "Deployment.Namespace", dep.Namespace, "Deployment.Name", dep.Name)
-			return reconcile.Result{}, err
-		}
-
-		// Define a new configmap
-		cm := r.configmapForApp(app)
-		reqLogger.Info("Creating a new ConfigMap", "ConfigMap.Namespace", cm.Namespace, "ConfigMap.Name", cm.Name)
-		err = r.client.Create(context.TODO(), cm)
-		if err != nil {
-			reqLogger.Error(err, "Failed to create new ConfigMap", "ConfigMap.Namespace", cm.Namespace, "ConfigMap.Name", cm.Name)
-			return reconcile.Result{}, err
-		}
-
-		// Define a new service
-		svc := r.serviceForApp(app)
-		reqLogger.Info("Creating a new Service", "Service.Namespace", svc.Namespace, "Service.Name", svc.Name)
-		err = r.client.Create(context.TODO(), svc)
-		if err != nil {
-			reqLogger.Error(err, "Failed to create new Service", "Service.Namespace", svc.Namespace, "Service.Name", svc.Name)
-			return reconcile.Result{}, err
-		}
-		// Deployment created successfully - return and requeue
-		return reconcile.Result{Requeue: true}, nil
-	} else if err != nil {
-		reqLogger.Error(err, "Failed to get Deployment")
-		return reconcile.Result{}, err
-	}
-
-	// Ensure the deployment size is the same as the spec
-	size := app.Spec.Size
-	if *found.Spec.Replicas != size {
-		found.Spec.Replicas = &size
-		err = r.client.Update(context.TODO(), found)
-		if err != nil {
-			reqLogger.Error(err, "Failed to update Deployment", "Deployment.Namespace", found.Namespace, "Deployment.Name", found.Name)
-			return reconcile.Result{}, err
-		}
-		// Spec updated - return and requeue
-		return reconcile.Result{Requeue: true}, nil
 	}
 
 	// Update the App status with the pod names
@@ -191,13 +193,17 @@ func (r *ReconcileApp) Reconcile(request reconcile.Request) (reconcile.Result, e
 // configmapForApp returns a app Configmap object
 func (r *ReconcileApp) configmapForApp(m *cachev1alpha1.AppService) *corev1.ConfigMap {
 	// ls := labelsForApp(m.Name)
-	data := map[string]string{"index.html": "<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><title>Title of the document</title></head><body>Content of the document......</body></html>"}
+	indexHTML := "<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><title>Title of the document</title></head><body>Content of the document......</body></html>"
+	notFoundHTML := "<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><title>404</title></head><body>Content of the document......</body></html>"
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "nginx-index",
 			Namespace: "default",
 		},
-		Data: data,
+		Data: map[string]string{
+			"index.html": indexHTML,
+			"404.html":   notFoundHTML,
+		},
 	}
 	// Set App instance as the owner and controller
 	controllerutil.SetControllerReference(m, cm, r.scheme)
@@ -293,36 +299,6 @@ func (r *ReconcileApp) deploymentForApp(m *cachev1alpha1.AppService) *appsv1.Dep
 	controllerutil.SetControllerReference(m, dep, r.scheme)
 	return dep
 }
-
-// func generateConfigMap(deploy *entity.Deployment) ([]corev1.Volume, []corev1.VolumeMount, error) {
-// 	volumes := []corev1.Volume{}
-// 	volumeMounts := []corev1.VolumeMount{}
-//
-// 	for _, v := range deploy.ConfigMaps {
-//
-// 		// TODO: check whether this configMap exist
-//
-// 		vName := fmt.Sprintf("%s-%s", ConfigMapNamePrefix, v.Name)
-//
-// 		volumes = append(volumes, corev1.Volume{
-// 			Name: vName,
-// 			VolumeSource: corev1.VolumeSource{
-// 				ConfigMap: &corev1.ConfigMapVolumeSource{
-// 					LocalObjectReference: corev1.LocalObjectReference{
-// 						Name: v.Name,
-// 					},
-// 				},
-// 			},
-// 		})
-//
-// 		volumeMounts = append(volumeMounts, corev1.VolumeMount{
-// 			Name:      vName,
-// 			MountPath: v.MountPath,
-// 		})
-// 	}
-//
-// 	return volumes, volumeMounts, nil
-// }
 
 // labelsForApp returns the labels for selecting the resources
 // belonging to the given app CR name.

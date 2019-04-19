@@ -5,5 +5,10 @@ metadata:
 spec:
   # Add fields here
   size: 1
-  selector: 
+  static:
+    - test.html
+  reload:
+   - index.html
+   - 404.html
+  selector:
     hot-reload-policy: delete

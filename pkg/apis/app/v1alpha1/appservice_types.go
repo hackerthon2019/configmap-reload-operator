@@ -16,6 +16,8 @@ type AppServiceSpec struct {
 	// Size is the size of the app deployment
 	Size     int32             `json:"size"`
 	Selector map[string]string `json:"selector"`
+	Reload   []string          `json:"reload"`
+	Static   []string          `json:"static"`
 }
 
 // AppServiceStatus defines the observed state of AppService
