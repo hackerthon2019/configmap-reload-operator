@@ -41,7 +41,7 @@ clean:
 .PHONY: src.build
 src.build:
 	$(MKDIR_P) $(BUILD_FOLDER)/cmd/
-	$(GO) build -v -o $(BUILD_FOLDER)/cmd/manager ./cmd/manager/main.go
+	GO111MODULE=on $(GO) build -mod=vendor -v -o $(BUILD_FOLDER)/cmd/manager ./cmd/manager/main.go
 
 .PHONY: src.test
 src.test:
