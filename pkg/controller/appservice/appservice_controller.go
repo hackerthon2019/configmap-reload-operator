@@ -134,6 +134,15 @@ func (r *ReconcileApp) Reconcile(request reconcile.Request) (reconcile.Result, e
 			reqLogger.Error(err, "Failed to create new ConfigMap", "ConfigMap.Namespace", cm.Namespace, "ConfigMap.Name", cm.Name)
 			return reconcile.Result{}, err
 		}
+
+		// Define a new service
+		svc := r.serviceForApp(app)
+		reqLogger.Info("Creating a new Service", "Service.Namespace", svc.Namespace, "Service.Name", svc.Name)
+		err = r.client.Create(context.TODO(), svc)
+		if err != nil {
+			reqLogger.Error(err, "Failed to create new Service", "Service.Namespace", svc.Namespace, "Service.Name", svc.Name)
+			return reconcile.Result{}, err
+		}
 		// Deployment created successfully - return and requeue
 		return reconcile.Result{Requeue: true}, nil
 	} else if err != nil {
@@ -214,7 +223,8 @@ func (r *ReconcileApp) serviceForApp(m *cachev1alpha1.AppService) *corev1.Servic
 	}
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "nginx-expose",
+			Name:      "nginx-expose",
+			Namespace: "default",
 		},
 		Spec: corev1.ServiceSpec{
 			Type:     "NodePort",
