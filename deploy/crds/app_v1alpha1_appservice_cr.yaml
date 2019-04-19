@@ -4,6 +4,6 @@ metadata:
   name: example-appservice
 spec:
   # Add fields here
-  size: 2
+  size: 1
   selector: 
     hot-reload-policy: delete

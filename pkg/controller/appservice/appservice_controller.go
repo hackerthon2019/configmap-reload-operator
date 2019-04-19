@@ -125,6 +125,15 @@ func (r *ReconcileApp) Reconcile(request reconcile.Request) (reconcile.Result, e
 			reqLogger.Error(err, "Failed to create new Deployment", "Deployment.Namespace", dep.Namespace, "Deployment.Name", dep.Name)
 			return reconcile.Result{}, err
 		}
+
+		// Define a new configmap
+		cm := r.configmapForApp(app)
+		reqLogger.Info("Creating a new ConfigMap", "ConfigMap.Namespace", cm.Namespace, "ConfigMap.Name", cm.Name)
+		err = r.client.Create(context.TODO(), cm)
+		if err != nil {
+			reqLogger.Error(err, "Failed to create new ConfigMap", "ConfigMap.Namespace", cm.Namespace, "ConfigMap.Name", cm.Name)
+			return reconcile.Result{}, err
+		}
 		// Deployment created successfully - return and requeue
 		return reconcile.Result{Requeue: true}, nil
 	} else if err != nil {
@@ -173,10 +182,10 @@ func (r *ReconcileApp) Reconcile(request reconcile.Request) (reconcile.Result, e
 // configmapForApp returns a app Configmap object
 func (r *ReconcileApp) configmapForApp(m *cachev1alpha1.AppService) *corev1.ConfigMap {
 	// ls := labelsForApp(m.Name)
-	data := map[string]string{"data": "mydata"}
+	data := map[string]string{"index.html": "<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><title>Title of the document</title></head><body>Content of the document......</body></html>"}
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      m.Name,
+			Name:      "nginx-index",
 			Namespace: "default",
 		},
 		Data: data,
@@ -222,7 +231,6 @@ func (r *ReconcileApp) serviceForApp(m *cachev1alpha1.AppService) *corev1.Servic
 func (r *ReconcileApp) deploymentForApp(m *cachev1alpha1.AppService) *appsv1.Deployment {
 	ls := labelsForApp(m.Name)
 	replicas := m.Spec.Size
-
 	dep := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "apps/v1",
@@ -245,10 +253,27 @@ func (r *ReconcileApp) deploymentForApp(m *cachev1alpha1.AppService) *appsv1.Dep
 					Containers: []corev1.Container{{
 						Image: "nginx:stable-alpine",
 						Name:  "app",
+						VolumeMounts: []corev1.VolumeMount{
+							{
+								Name:      "nginx-index",
+								ReadOnly:  true,
+								MountPath: "/usr/share/nginx/html",
+							},
+						},
 						Ports: []corev1.ContainerPort{{
 							ContainerPort: 80,
-							Name:          "app",
+							Name:          "nginx-app",
 						}},
+					}},
+					Volumes: []corev1.Volume{{
+						Name: "nginx-index",
+						VolumeSource: corev1.VolumeSource{
+							ConfigMap: &corev1.ConfigMapVolumeSource{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: "nginx-index",
+								},
+							},
+						},
 					}},
 				},
 			},
@@ -258,6 +283,36 @@ func (r *ReconcileApp) deploymentForApp(m *cachev1alpha1.AppService) *appsv1.Dep
 	controllerutil.SetControllerReference(m, dep, r.scheme)
 	return dep
 }
+
+// func generateConfigMap(deploy *entity.Deployment) ([]corev1.Volume, []corev1.VolumeMount, error) {
+// 	volumes := []corev1.Volume{}
+// 	volumeMounts := []corev1.VolumeMount{}
+//
+// 	for _, v := range deploy.ConfigMaps {
+//
+// 		// TODO: check whether this configMap exist
+//
+// 		vName := fmt.Sprintf("%s-%s", ConfigMapNamePrefix, v.Name)
+//
+// 		volumes = append(volumes, corev1.Volume{
+// 			Name: vName,
+// 			VolumeSource: corev1.VolumeSource{
+// 				ConfigMap: &corev1.ConfigMapVolumeSource{
+// 					LocalObjectReference: corev1.LocalObjectReference{
+// 						Name: v.Name,
+// 					},
+// 				},
+// 			},
+// 		})
+//
+// 		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+// 			Name:      vName,
+// 			MountPath: v.MountPath,
+// 		})
+// 	}
+//
+// 	return volumes, volumeMounts, nil
+// }
 
 // labelsForApp returns the labels for selecting the resources
 // belonging to the given app CR name.
