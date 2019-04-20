@@ -1,5 +1,8 @@
 # configmap-reload-operator
 
+## Team member
+<img src="doc/images/hackathon2019.jpg" height="500px"></img>
+
 ## Run a nginx Demo
 
 ### Build, install and run ConfigMap Reload Operator
@@ -69,11 +72,7 @@ to
             index  index.html index.htm;
         }
 ```
-### Delete one
-```
-PODNAME=`sudo kubectl get pod --selector=app=nginx -o jsonpath="{.items[0].metadata.name}"`
-sudo kubectl delete pod $PODNAME
-```
+The operator will rolling update the service Pods automatically.
 
 ### Get The WebDisplay again
 ```
