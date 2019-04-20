@@ -54,6 +54,9 @@ This will show an output as follow:
 **NOTE** the paragraph of this render is
 "This is wukong, I can change.(我是悟空，我会72变)"
 
+If you use browser it will show a webpage as follow:
+<img src="doc/images/nginx1.PNG"></img>
+
 ### Change the ConfigMap
 ```
 sudo kubectl edit ConfigMap nginx-conf
@@ -73,6 +76,7 @@ to
         }
 ```
 The operator will rolling update the service Pods automatically.
+<img src="doc/images/rolling-update.gif"></img>
 
 ### Get The WebDisplay again
 ```
@@ -102,6 +106,9 @@ This paragraph will change to:
 ```
 **NOTE** the paragraph in this render is
 "Change!Change! I'm Mei Houwang.(变变变，我是美猴王)"
+
+If you use browser it will show a webpage as follow:
+<img src="doc/images/nginx2.PNG"></img>
 
 ### Destroy the Nginx Deployment
 ```
