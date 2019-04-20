@@ -43,13 +43,13 @@ This will show an output as follow:
 </head>
 <body>
 <h1>Welcome to nginx!</h1>
-<p><em>This is wukong, I can change.</em></p>
+<p><em>This is wukong, I can change.(我是悟空，我会72变)</em></p>
 </body>
 </html>
 
 ```
-**NOTE** the paragraph in this render is "This is wukong, I can change."
-(我是悟空，我会72变)
+**NOTE** the paragraph of this render is
+"This is wukong, I can change.(我是悟空，我会72变)"
 
 ### Change the ConfigMap
 ```
@@ -58,7 +58,7 @@ sudo kubectl edit ConfigMap nginx-conf
 Change root location in data of ConfigMap from:
 ```
         location / {
-            root   /usr/share/nginx/html1;
+            root   /usr/share/nginx/html;
             index  index.html index.htm;
         }
 ```
@@ -96,13 +96,13 @@ This paragraph will change to:
 </head>
 <body>
 <h1>Welcome to nginx!</h1>
-<p><em>Change!Change! I'm Mei Houwang.</em></p>
+<p><em>Change!Change! I'm Mei Houwang.(变变变，我是美猴王)</em></p>
 </body>
 </html>
 
 ```
-**NOTE** the paragraph in this render is "This is wukong, I can change."
-(变变变，我是美猴王)
+**NOTE** the paragraph in this render is
+"Change!Change! I'm Mei Houwang.(变变变，我是美猴王)"
 
 ### Destroy the Nginx Deployment
 ```
@@ -118,4 +118,4 @@ sudo kubectl exec $PODNAME -it -- /bin/bash
 ### Info
 If you want to know more detail operator info, please see operator [user guide][user-guide.md].
 
-[user-guide.md]: https://raw.githubusercontent.com/operator-framework/operator-sdk/master/doc/user-guide.md
+[user-guide.md]: https://github.com/operator-framework/operator-sdk/blob/master/doc/user-guide.md
