@@ -14,3 +14,10 @@ func IsSameMD5(a string, b string) bool {
 	io.WriteString(o, b)
 	return fmt.Sprintf("%x", h.Sum(nil)) == fmt.Sprintf("%x", o.Sum(nil))
 }
+
+// ToMD5String convert MD5 string
+func ToMD5String(a string) string {
+	h := md5.New()
+	io.WriteString(h, a)
+	return fmt.Sprintf("%x", h.Sum(nil))
+}

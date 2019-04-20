@@ -3,6 +3,7 @@ package appservice
 import (
 	"context"
 	"reflect"
+	"strconv"
 
 	cachev1alpha1 "github.com/hackerthon2019/configmap-reload-operator/pkg/apis/app/v1alpha1"
 	// kubeCtl "github.com/hackerthon2019/configmap-reload-operator/pkg/kubectl"
@@ -72,6 +73,8 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 }
 
 var _ reconcile.Reconciler = &ReconcileApp{}
+var configMapList [3]*corev1.ConfigMap
+var digests []string
 
 // ReconcileApp reconciles a App object
 type ReconcileApp struct {
@@ -109,24 +112,28 @@ func (r *ReconcileApp) Reconcile(request reconcile.Request) (reconcile.Result, e
 		return reconcile.Result{}, err
 	}
 
-	for _, f := range app.Spec.Reload {
-		reqLogger.Info("My reload file:" + f)
-	}
-
-	// Define a new deployment
-	dep := r.deploymentForApp(app)
-	reqLogger.Info("Creating a new Deployment", "Deployment.Namespace", dep.Namespace, "Deployment.Name", dep.Name)
-	err = r.client.Create(context.TODO(), dep)
+	// Define a new configmap
+	configMapList[0] = r.configmapForApp(app, "nginx-default-conf", "default.conf", utils.NginxConf)
+	reqLogger.Info("Creating a new ConfigMap", "ConfigMap.Namespace", configMapList[0].Namespace, "ConfigMap.Name", configMapList[0].Name)
+	err = r.client.Create(context.TODO(), configMapList[0])
 	if err != nil {
-		reqLogger.Error(err, "Failed to create new Deployment", "Deployment.Namespace", dep.Namespace, "Deployment.Name", dep.Name)
+		reqLogger.Error(err, "Failed to create new ConfigMap", "ConfigMap.Namespace", configMapList[0].Namespace, "ConfigMap.Name", configMapList[0].Name)
 	}
 
 	// Define a new configmap
-	cm := r.configmapForApp(app)
-	reqLogger.Info("Creating a new ConfigMap", "ConfigMap.Namespace", cm.Namespace, "ConfigMap.Name", cm.Name)
-	err = r.client.Create(context.TODO(), cm)
+	configMapList[1] = r.configmapForApp(app, "nginx-index", "index.html", utils.IndexHTML)
+	reqLogger.Info("Creating a new ConfigMap", "ConfigMap.Namespace", configMapList[1].Namespace, "ConfigMap.Name", configMapList[1].Name)
+	err = r.client.Create(context.TODO(), configMapList[1])
 	if err != nil {
-		reqLogger.Error(err, "Failed to create new ConfigMap", "ConfigMap.Namespace", cm.Namespace, "ConfigMap.Name", cm.Name)
+		reqLogger.Error(err, "Failed to create new ConfigMap", "ConfigMap.Namespace", configMapList[1].Namespace, "ConfigMap.Name", configMapList[1].Name)
+	}
+
+	// Define a new configmap
+	configMapList[2] = r.configmapForApp(app, "nginx-index-dev", "index-dev.html", utils.IndexDevHTML)
+	reqLogger.Info("Creating a new ConfigMap", "ConfigMap.Namespace", configMapList[2].Namespace, "ConfigMap.Name", configMapList[2].Name)
+	err = r.client.Create(context.TODO(), configMapList[2])
+	if err != nil {
+		reqLogger.Error(err, "Failed to create new ConfigMap", "ConfigMap.Namespace", configMapList[2].Namespace, "ConfigMap.Name", configMapList[2].Name)
 	}
 
 	// Define a new service
@@ -135,6 +142,18 @@ func (r *ReconcileApp) Reconcile(request reconcile.Request) (reconcile.Result, e
 	err = r.client.Create(context.TODO(), svc)
 	if err != nil {
 		reqLogger.Error(err, "Failed to create new Service", "Service.Namespace", svc.Namespace, "Service.Name", svc.Name)
+	}
+
+	for i, cmName := range app.Spec.Dynamic {
+		digests = append(digests, utils.ToMD5String(configMapList[i].Data[cmName]))
+	}
+
+	// Define a new deployment
+	dep := r.deploymentForApp(app, digests)
+	reqLogger.Info("Creating a new Deployment", "Deployment.Namespace", dep.Namespace, "Deployment.Name", dep.Name)
+	err = r.client.Create(context.TODO(), dep)
+	if err != nil {
+		reqLogger.Error(err, "Failed to create new Deployment", "Deployment.Namespace", dep.Namespace, "Deployment.Name", dep.Name)
 	}
 
 	cmFound := &corev1.ConfigMap{}
@@ -151,14 +170,14 @@ func (r *ReconcileApp) Reconcile(request reconcile.Request) (reconcile.Result, e
 		reqLogger.Error(err, "Failed to get ConfigMap")
 		return reconcile.Result{}, err
 	}
-	for _, f := range app.Spec.Reload {
-		reqLogger.Info("Comparing the " + f + " file...")
-		if utils.IsSameMD5(cm.Data[f], cmFound.Data[f]) {
-			reqLogger.Info(f + " has same name as previous.")
-		} else {
-			reqLogger.Info(f + " should now do comfigmap reload!")
-		}
-	}
+	// for _, f := range app.Spec.Reload {
+	// 	reqLogger.Info("Comparing the " + f + " file...")
+	// 	if utils.IsSameMD5(cm.Data[f], cmFound.Data[f]) {
+	// 		reqLogger.Info(f + " has same name as previous.")
+	// 	} else {
+	// 		reqLogger.Info(f + " should now do comfigmap reload!")
+	// 	}
+	// }
 
 	for k, v := range app.Spec.Selector {
 		reqLogger.Info("MyKEY: " + k)
@@ -191,18 +210,14 @@ func (r *ReconcileApp) Reconcile(request reconcile.Request) (reconcile.Result, e
 }
 
 // configmapForApp returns a app Configmap object
-func (r *ReconcileApp) configmapForApp(m *cachev1alpha1.AppService) *corev1.ConfigMap {
-	// ls := labelsForApp(m.Name)
-	indexHTML := "<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><title>Title of the document</title></head><body>Content of the document......</body></html>"
-	notFoundHTML := "<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><title>404</title></head><body>Content of the document......</body></html>"
+func (r *ReconcileApp) configmapForApp(m *cachev1alpha1.AppService, name string, filename string, content string) *corev1.ConfigMap {
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "nginx-index",
+			Name:      name,
 			Namespace: "default",
 		},
 		Data: map[string]string{
-			"index.html": indexHTML,
-			"404.html":   notFoundHTML,
+			filename: content,
 		},
 	}
 	// Set App instance as the owner and controller
@@ -244,8 +259,12 @@ func (r *ReconcileApp) serviceForApp(m *cachev1alpha1.AppService) *corev1.Servic
 }
 
 // deploymentForApp returns a app Deployment object
-func (r *ReconcileApp) deploymentForApp(m *cachev1alpha1.AppService) *appsv1.Deployment {
+func (r *ReconcileApp) deploymentForApp(m *cachev1alpha1.AppService, digests []string) *appsv1.Deployment {
 	ls := labelsForApp(m.Name)
+	for i, d := range digests {
+		labelName := "configmap-data-md5-" + strconv.Itoa(i)
+		ls[labelName] = d
+	}
 	replicas := m.Spec.Size
 	dep := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{
@@ -271,9 +290,19 @@ func (r *ReconcileApp) deploymentForApp(m *cachev1alpha1.AppService) *appsv1.Dep
 						Name:  "app",
 						VolumeMounts: []corev1.VolumeMount{
 							{
+								Name:      "nginx-default-conf",
+								ReadOnly:  true,
+								MountPath: "/etc/nginx/conf.d",
+							},
+							{
 								Name:      "nginx-index",
 								ReadOnly:  true,
 								MountPath: "/usr/share/nginx/html",
+							},
+							{
+								Name:      "nginx-index-dev",
+								ReadOnly:  true,
+								MountPath: "/usr/share/nginx/dev/html",
 							},
 						},
 						Ports: []corev1.ContainerPort{{
@@ -281,16 +310,38 @@ func (r *ReconcileApp) deploymentForApp(m *cachev1alpha1.AppService) *appsv1.Dep
 							Name:          "nginx-app",
 						}},
 					}},
-					Volumes: []corev1.Volume{{
-						Name: "nginx-index",
-						VolumeSource: corev1.VolumeSource{
-							ConfigMap: &corev1.ConfigMapVolumeSource{
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: "nginx-index",
+					Volumes: []corev1.Volume{
+						{
+							Name: "nginx-default-conf",
+							VolumeSource: corev1.VolumeSource{
+								ConfigMap: &corev1.ConfigMapVolumeSource{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: "nginx-default-conf",
+									},
 								},
 							},
 						},
-					}},
+						{
+							Name: "nginx-index",
+							VolumeSource: corev1.VolumeSource{
+								ConfigMap: &corev1.ConfigMapVolumeSource{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: "nginx-index",
+									},
+								},
+							},
+						},
+						{
+							Name: "nginx-index-dev",
+							VolumeSource: corev1.VolumeSource{
+								ConfigMap: &corev1.ConfigMapVolumeSource{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: "nginx-index-dev",
+									},
+								},
+							},
+						},
+					},
 				},
 			},
 		},

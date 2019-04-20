@@ -5,11 +5,14 @@ metadata:
 spec:
   # Add fields here
   size: 1
+  # static configmap which will not trigger hot-reload
   static:
-    - test.html
-  reload:
+    - mystatic
+  # dynamic configmap which will trigger hot-reload
+  dynamic:
+   - default-conf
    - index.html
-   - 404.html
+   - index-dev.html
   selector:
     hot-reload-policy: delete
 

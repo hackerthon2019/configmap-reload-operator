@@ -16,7 +16,7 @@ type AppServiceSpec struct {
 	// Size is the size of the app deployment
 	Size     int32             `json:"size"`
 	Selector map[string]string `json:"selector"`
-	Reload   []string          `json:"reload"`
+	Dynamic  []string          `json:"dynamic"`
 	Static   []string          `json:"static"`
 }
 
